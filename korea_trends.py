@@ -8,7 +8,7 @@ SLACK_WEBHOOK = os.environ["SLACK_WEBHOOK"]
 HEADERS = {"Authorization": f"Bearer {X_BEARER_TOKEN}"}
 KOREA_WOEID = 23424868
 
-def get_korea_trends(max_trends=12):
+def get_korea_trends(max_trends=10):
     url = f"https://api.x.com/2/trends/by/woeid/{KOREA_WOEID}"
     params = {
         "max_trends": max_trends,
@@ -40,49 +40,93 @@ def engagement_score(post):
         + m.get("quote_count", 0) * 2
     )
 
-def build_slack_message(trends_data):
+def build_blocks(trends_data):
     today = datetime.now().strftime("%Y-%m-%d")
-    lines = [f"*한국 트렌드 ({today})*\n"]
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": "📊 한국 트렌드 리포트"
+            }
+        },
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": f"{today}"
+                }
+            ]
+        },
+        {"type": "divider"}
+    ]
 
     for i, item in enumerate(trends_data, 1):
         trend = item["trend"]
         posts = item["posts"]
+        name = trend.get("trend_name", "")
         count = trend.get("tweet_count")
-        count_str = f" ({count:,})" if count else ""
+        count_str = f" · {count:,}건" if count else ""
 
-        lines.append(f"*{i}. {trend.get('trend_name')}*{count_str}")
+        # 트렌드 제목
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*{i}. {name}*{count_str}"
+            }
+        })
 
-        if not posts:
-            lines.append("   · 관련 게시물 없음\n")
-            continue
-
-        posts_sorted = sorted(posts, key=engagement_score, reverse=True)[:3]
-        for p in posts_sorted:
-            text = p.get("text", "").replace("\n", " ")
+        if posts:
+            top = sorted(posts, key=engagement_score, reverse=True)[0]
+            text = top.get("text", "").replace("\n", " ")
             if len(text) > 70:
                 text = text[:70] + "..."
-            score = int(engagement_score(p))
-            link = f"https://x.com/i/status/{p['id']}"
-            lines.append(f"   · [{score}] {text}")
-            lines.append(f"     <{link}|원글 보기>")
-        lines.append("")
+            link = f"https://x.com/i/status/{top['id']}"
 
-    return "\n".join(lines)
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"{text}\n<{link}|원글 보기>"
+                }
+            })
+        else:
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "_관련 게시물 없음_"
+                }
+            })
 
-def send_to_slack(text):
-    res = requests.post(SLACK_WEBHOOK, json={"text": text}, timeout=30)
+        blocks.append({"type": "divider"})
+
+    # 마지막 divider 제거
+    if blocks and blocks[-1].get("type") == "divider":
+        blocks.pop()
+
+    return blocks
+
+def send_to_slack(blocks):
+    payload = {
+        "blocks": blocks,
+        "text": "한국 트렌드 리포트"  # 알림용 미리보기 텍스트
+    }
+    res = requests.post(SLACK_WEBHOOK, json=payload, timeout=30)
     res.raise_for_status()
 
 def main():
     trends = get_korea_trends()
     results = []
-    for t in trends[:10]:
+    for t in trends[:8]:
         name = t.get("trend_name", "")
         posts = get_related_posts(name, max_results=10)
         results.append({"trend": t, "posts": posts})
 
-    message = build_slack_message(results)
-    send_to_slack(message)
+    blocks = build_blocks(results)
+    send_to_slack(blocks)
     print("Slack 전송 완료")
 
 if __name__ == "__main__":
