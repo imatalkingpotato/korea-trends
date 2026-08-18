@@ -2,7 +2,7 @@ name: Korea Trends Daily
 
 on:
   schedule:
-    - cron: '0 1 * * 1-5'   # 월~금 한국시간 오전 10시
+    - cron: '0 2 * * 1-5'   # 월~금 한국시간 오전 11시
   workflow_dispatch:
 
 permissions:
