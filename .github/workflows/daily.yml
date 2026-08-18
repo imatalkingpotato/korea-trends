@@ -1,0 +1,26 @@
+name: Korea Trends Daily
+
+on:
+  schedule:
+    - cron: '0 1 * * 1-5'   # 월~금 UTC 01:00 = 한국시간 오전 10시
+  workflow_dispatch:         # 수동 실행 버튼도 생김
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run script
+        env:
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        run: python korea_trends.py
